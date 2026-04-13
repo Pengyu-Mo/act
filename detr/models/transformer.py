@@ -46,7 +46,7 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None):
+    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None, vlm_input=None, vlm_pos_embed=None):
         # TODO flatten only when input has H and W
         if len(src.shape) == 4: # has H and W
             # flatten NxCxHxW to HWxNxC
@@ -56,11 +56,18 @@ class Transformer(nn.Module):
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
             # mask = mask.flatten(1)
 
-            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim
-            pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
-
-            addition_input = torch.stack([latent_input, proprio_input], axis=0)
-            src = torch.cat([addition_input, src], axis=0)
+            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # (2, bs, dim)
+            if vlm_input is not None:
+                # vlm_input: (bs, dim) → (1, bs, dim)
+                vlm_token = vlm_input.unsqueeze(0)
+                vlm_pos = vlm_pos_embed.unsqueeze(1).repeat(1, bs, 1)  # (1, bs, dim)
+                pos_embed = torch.cat([additional_pos_embed, vlm_pos, pos_embed], axis=0)
+                addition_input = torch.stack([latent_input, proprio_input], axis=0)
+                src = torch.cat([addition_input, vlm_token, src], axis=0)
+            else:
+                pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
+                addition_input = torch.stack([latent_input, proprio_input], axis=0)
+                src = torch.cat([addition_input, src], axis=0)
         else:
             assert len(src.shape) == 3
             # flatten NxHWxC to HWxNxC
@@ -299,7 +306,7 @@ def build_transformer(args):
         num_encoder_layers=args.enc_layers,
         num_decoder_layers=args.dec_layers,
         normalize_before=args.pre_norm,
-        return_intermediate_dec=True,
+        return_intermediate_dec=False,
     )
 
 
